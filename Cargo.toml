@@ -1,0 +1,9 @@
+[package]
+name = "new_rust_project"
+version = "0.1.0"
+authors = ["EleanorWhite <nwhite@hmc.edu>"]
+edition = "2018"
+
+[dependencies]
+termion = "1"
+rand = "0"
