@@ -31,11 +31,6 @@ const NUM_SUITES: i32 = 4;
 const NUM_HAND: i32 = 5; // number of cards in a hand
 const NUM_CARDS: i32 = NUM_SUITES*NUM_RANKS;
 
-//#[derive(Debug)]
-//struct Stack {
-//	cards: Vec<String>,
-//}
-
 	
 fn shuffle(mut cards: &mut Vec<String>) {
 	let mut rng = rand::thread_rng();
@@ -59,15 +54,52 @@ fn init_deck() -> Vec<String> {
 	return deck;
 }
 
-fn deal_hand(deck: &mut Vec<String>, hand: &mut Vec<String>) {
+fn card_index(card: &String) -> Option<usize> {
+	for i in 0..ranks.len() {
+		if (ranks[i] == card) {
+			return Some(i);
+		}
+	}
+	return None;
+}
+
+fn sort_hand(hand: &mut Vec<String>) {
+	for i in 0..hand.len() {
+		let mut min = i;
+		let mut min_val; // = card_index(hand[min])
+		match card_index(&hand[min]) {
+			None    => { println!("Found unknown card"); return; },
+			Some(x) => min_val = x
+		}
+		for j in i..hand.len() {
+			let new;
+			match card_index(&hand[j]) {
+				None    => { println!("Found unknown card"); return; },
+				Some(x) => new = x
+			}
+			if (new < min_val) {
+				min = j;
+				//let min_val; // = card_index(hand[min])
+				match card_index(&hand[min]) {
+					None    => { println!("Found unknown card"); return; },
+					Some(x) => min_val = x
+				}
+			}
+		}
+		hand.swap(i, min);
+	}
+}
+
+
+fn deal_hand(deck: &mut Vec<String>, mut hand: &mut Vec<String>) {
 	for i in 0..NUM_HAND {
 		let card = deck.pop();
 		match card {
 			None => println!("ERROR: ran out of cards to deal"),
 			Some(x) => hand.push(x)
 		}
-		
 	}
+	sort_hand(&mut hand);
 }
 
 
@@ -89,6 +121,9 @@ fn player_turn(mut playing_hand: &mut Vec<String>, mut playing_finished: &mut Ve
 	mut other_hand: &mut Vec<String>, mut deck: &mut Vec<String>) {
 	println!("Your Turn!");
 	if (playing_hand.is_empty()) {
+		if (deck.is_empty()) { // game is over
+			return;
+		}
 		println!("Playing hand is empty! Drawing a card from deck!");
 		draw_card(&mut playing_hand, &mut playing_finished, &mut deck, true);
 		return;
@@ -107,20 +142,34 @@ fn player_turn(mut playing_hand: &mut Vec<String>, mut playing_finished: &mut Ve
     	std::io::stdin().read_line(buffer);
 		guess = buffer.trim_right().to_string();
 	} 
-	turn(&mut playing_hand, &mut playing_finished, &mut other_hand, 
+	let correct = turn(&mut playing_hand, &mut playing_finished, &mut other_hand, 
 		 &mut deck, guess.trim_right().to_string(), true);
+	// guessing correctly means you go again
+	if (correct) {
+		println!("Your hand: {:?}, completed: {:?}", playing_hand, playing_finished);
+		player_turn(&mut playing_hand, &mut playing_finished, &mut other_hand, &mut deck);
+	}
 }
 
 fn comp_turn(mut player_hand: &mut Vec<String>, mut comp_hand: &mut Vec<String>, 
 	mut comp_finished: &mut Vec<String>, mut deck: &mut Vec<String> ) {
+		
+	if (comp_hand.is_empty()) {
+		if (deck.is_empty()) { // game is over
+			return;
+		}
+		println!("Computer has no cards! Drawing a card from the deck!");
+		draw_card(&mut comp_hand, &mut comp_finished, &mut deck, false);
+		return;
+	}
+	
 	let mut rng = rand::thread_rng();
 	let guess_opt = comp_hand.get(rng.gen_range(0, comp_hand.len()));
 	let guess: String;
 	
 	match guess_opt {
 		None => {
-			println!("Computer has no cards! Drawing a card from the deck!");
-			draw_card(&mut comp_hand, &mut comp_finished, &mut deck, false);
+			println!("ERROR: Failed to get guess from Computer.");
 			return;
 		}
 		Some(x) => { 
@@ -128,8 +177,12 @@ fn comp_turn(mut player_hand: &mut Vec<String>, mut comp_hand: &mut Vec<String>,
 		}
 	}
 	println!("Computer's turn! Computer guessed: {}", guess);
-	turn(&mut comp_hand, &mut comp_finished, &mut player_hand, 
+	let correct = turn(&mut comp_hand, &mut comp_finished, &mut player_hand, 
 		 &mut deck, guess.trim_right().to_string(), false);	
+	// guessing correctly means you go again
+	if (correct) {
+		comp_turn(&mut player_hand, &mut comp_hand, &mut comp_finished, &mut deck);
+	}
 	
 }
 
@@ -143,9 +196,12 @@ fn card_in(hand: &Vec<String>, card: &String)-> bool {
 }
 
 fn turn(mut playing_hand: &mut Vec<String>, mut playing_finished: &mut Vec<String>, 
-	mut other_hand: &mut Vec<String>, mut deck: &mut Vec<String>, guess: String, is_player: bool) {
+	mut other_hand: &mut Vec<String>, mut deck: &mut Vec<String>, guess: String, is_player: bool) -> bool {
+	let mut correct = false;
+		
 	if (card_in(other_hand, &guess)) {
 		println!("Correct!");
+		correct = true;
 		
 		// move card into other hand
 		for c in other_hand.iter() {
@@ -160,12 +216,15 @@ fn turn(mut playing_hand: &mut Vec<String>, mut playing_finished: &mut Vec<Strin
 		println!("Go Fish!");
 		draw_card(&mut playing_hand, &mut playing_finished, &mut deck, is_player)
 	}
+	sort_hand(&mut playing_hand);
+	sort_hand(&mut playing_finished);
+	return correct;
 }
 
 fn draw_card(mut hand: &mut Vec<String>, mut finished: &mut Vec<String>, deck: &mut Vec<String>, is_player: bool) {
 	let draw = deck.pop();
 	match draw {
-		None => println!("Failed to draw!"),
+		None => println!("No More Cards Left!!"),
 		Some(x) => { hand.push(x.clone());
 					 has_finished(&mut hand, &mut finished, &x);
 					 if (is_player) { println!("Drew {}", &x); }
@@ -187,6 +246,15 @@ fn has_finished(hand: &mut Vec<String>, finished: &mut Vec<String>, guess: &Stri
 		}
 }
 
+fn game_over(player_finished: &Vec<String>, comp_finished: &Vec<String>) {
+	if (comp_finished.len() > player_finished.len()) {
+		println!("Computer Wins!");
+	} else { // player wins ties
+		println!("You win!");
+	}
+	println!("Your stacks: {:?}, Computer's stacks: {:?}", player_finished, comp_finished);
+}
+
 fn main() {
 	let (mut deck, mut player_hand, mut comp_hand) = deal_cards();
 	let mut player_finished = Vec::<String>::new();
@@ -201,11 +269,13 @@ fn main() {
 	}
 
 	while true {
-		player_turn(&mut player_hand, &mut player_finished, &mut comp_hand, &mut deck);
-		//println!("{:?}", deck);
+		if (deck.is_empty() && player_hand.is_empty()) {
+			game_over(&player_finished, &comp_finished);
+			return;
+		}
 		println!("Your hand: {:?}, completed: {:?}", player_hand, player_finished);
-		//println!("{:?}", comp_hand);
-		//println!("{:?}", player_finished);
+		println!("Computer's completed: {:?}", comp_finished);
+		player_turn(&mut player_hand, &mut player_finished, &mut comp_hand, &mut deck);
 		comp_turn(&mut player_hand, &mut comp_hand, &mut comp_finished, &mut deck);
 	}
 }
